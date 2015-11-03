@@ -22,6 +22,7 @@ class TwinSystem():
                     raise ValueError("illegal construction parameters")
             # self.__Laue = CUBIC_LAUE_GROUP.matrices()
             self.__Laue = CUBIC_LAUE_GROUP
+
         elif len(args) >= 2:
             try:
                 self.__Ulist = np.array(args[0])
@@ -35,7 +36,6 @@ class TwinSystem():
 
     def Ulist(self):
         """
-
         :return: the list of U's
         :rtype: :py:class:`numpy.ndarray`
         """
@@ -134,16 +134,14 @@ class TwinPair():
     martensite variants U_i and U_j.
     """
     
-    global tol
-    tol = 5*1e-3
-    
-    def __init__(self, Ui, Uj, skipcheck=False):
+    def __init__(self, Ui, Uj, tolerance=1e-5, skipcheck=False):
 
         if not skipcheck and (not util.utils.pos_def_sym(Ui) or not util.utils.pos_def_sym(Uj)):
             raise ValueError("Ui or Uj is not a 3 x 3 positive definite symmetric matrix")
 
         self.__Ui = Ui
         self.__Uj = Uj
+        self.__tol = tolerance
 
         Uiinv = la.inv(Ui)
         self.__C = np.dot(Uiinv.dot(Uj), Uj.dot(Uiinv))
@@ -182,10 +180,9 @@ class TwinPair():
         there exists a Q in SO(3) s.t. Ui and Uj are rank1 connected.
         :return: if the twin pair is in fact twinnable
         """
-        if np.max(np.abs(self.__Ui - self.__Uj)) < SMALL:
+        if np.isclose(np.max(np.abs(self.__Ui - self.__Uj)), 0.0):
             return False
-        # return abs(self.__e[1] - 1) < SMALL
-        return abs(self.__e[1] - 1) < tol
+        return abs(self.__e[1] - 1) < self.__tol
 
     def isconventional(self, *lauegroup):
         """
@@ -198,7 +195,7 @@ class TwinPair():
             twofold = CUBIC_LAUE_GROUP.matrices()[1:10] if len(lauegroup) == 0 else lauegroup[0].matrices()
             conventional = False
             for Q in twofold:
-                if np.max(np.abs(Q.dot(self.__Ui).dot(Q.T) - self.__Uj)) < SMALL:
+                if np.isclose(np.max(np.abs(Q.dot(self.__Ui).dot(Q.T) - self.__Uj)), 0.0):
                     conventional = True
                     break
             self.__conventional = conventional
@@ -222,7 +219,7 @@ class TwinPair():
             A_21 = np.dot(self.__v[1], As.dot(self.__v[0]))
             ehat = []
             for s in [-1, 1]:
-                if abs(s * math.sqrt(self.__e[2]) * A_23 + A_21) < SMALL:
+                if abs(s * np.sqrt(self.__e[2]) * A_23 + A_21) <= 0.0005:
                     del1 = math.sqrt(2*(A_11 + s * math.sqrt(self.__e[2])*A_13))
                     del3 = s * math.sqrt(self.__e[2]) * del1
                     e = del1 * self.__Ui.dot(self.__v[0]) + del3 * self.__Ui.dot(self.__v[2])
@@ -300,30 +297,15 @@ class TwinPair():
             raise AttributeError("only twinnable twin pairs have twin parameters")
 
         if self.__twinparam is None:
-            if len(self.ax())>0:
+            if len(self.ax()) > 0.0:
                 t_ax = self.ax()[0]
-                self.__twinparam = _solvetwin(self.__Ui, self.__Uj, t_ax)
+                self.__twinparam = _solvetwin(self.__Ui, self.__Uj, t_ax, self.__tol)
             else:
-                self.__twinparam = _solvetwin(self.__Ui, self.__Uj, None)
+                self.__twinparam = _solvetwin(self.__Ui, self.__Uj, None, self.__tol)
 
         return self.__twinparam
 
-    def iscompatible(self, twintype="C"):
-        """
 
-        :return: if the twin can be compatible with the reference (identity matrix)
-        """
-        if twintype not in ["I", "II", "C"]:
-            raise ValueError("unknown twin type {:s}", str(twintype))
-        elif twintype == "I":
-            return not self.volumefrac()[0]==None
-        elif twintype == "II":
-            return not self.volumefrac()[1]==None
-        else:
-            return not self.volumefrac()[0]==None or not self.volumefrac()[1]==None
-
-
-        # return np.array(np.array(self.volumefrac()) is not None).all()
 
 
     def volumefrac(self):
@@ -341,6 +323,7 @@ class TwinPair():
 
         if not self.twinparam()[1] == None:
             aII, nII = self.twinparam()[1][1:]
+            # print("aII = {}, nII = {}".format(aII, nII))
             self.__fII = _solve_f(self.__Ui, aII, nII)
         else:
             self.__fII = None
@@ -354,9 +337,8 @@ class TwinPair():
         """
         if twintype not in ["I", "II", "C"]:
             raise ValueError("unknown twin type {:s}", str(twintype))
-
-        if not self.iscompatible():
-            raise AttributeError("twin pair is incompatible")
+        if not self.istwinnable():
+            raise AttributeError("twin pair is not twinnable!")
 
         tp = self.twinparam()
         fs = self.volumefrac()
@@ -368,9 +350,10 @@ class TwinPair():
             a = tp[i][1]
             n = tp[i][2]
             Uf = [self.__Ui + f * np.outer(a, n),
-                  self.__Ui + (1 - f) * np.outer(a, n)]
-            hps.extend(_solve_am(Uf[0].T.dot(Uf[0])))
-            hps.extend(_solve_am(Uf[1].T.dot(Uf[1])))
+                  self.__Ui + (1.0 - f) * np.outer(a, n)]
+            hps.extend(_solve_am(Uf[0].T.dot(Uf[0]), self.__tol))
+            hps.extend(_solve_am(Uf[1].T.dot(Uf[1]), self.__tol))
+
 
         # [(R, b, m), (R, b, m), (R, b, m), (R, b, m)]
         return hps
@@ -392,7 +375,7 @@ class TwinPair():
 #                     [1/sqrt(2), 0, 1/sqrt(2)], [1/sqrt(2), 0, -1/sqrt(2)],
 #                     [0, 1/sqrt(2), 1/sqrt(2)], [0, 1/sqrt(2), 1/sqrt(2)]]
 
-def _solvetwin(U, Uj, e):
+def _solvetwin(U, Uj, e, tol_twin):
     """
     find the two solutions to the twinning equation
     """
@@ -401,7 +384,8 @@ def _solvetwin(U, Uj, e):
         Uinv = la.inv(U)
         R180 = -np.eye(3) + 2*np.outer(ehat, ehat)
         uj = np.dot(R180.dot(U), R180.T)
-        if _isvariant(U, uj):
+        if _isvariant(U, Uj):
+            print("This is normal twin")
             n1 = e
             denominator = np.dot(np.dot(Uinv, e), np.dot(Uinv, e))
             a1 = 2 * (Uinv.dot(e)/denominator - U.dot(e))
@@ -418,17 +402,29 @@ def _solvetwin(U, Uj, e):
             Q2 = (U + np.outer(a2, n2)).dot(la.inv(uj))
             return (Q1, a1, n1), (Q2, a2, n2)
         else:
-            return None
+            cmix = np.dot(la.inv(U).dot(Uj), Uj.dot(la.inv(U)))
+            #print("This is abnormal twin!")
+            (Q1, hat_a1, hat_n1), (Q2, hat_a2, hat_n2) = _solve_am(cmix, tol_twin)
+            rho1 = la.norm(U.T.dot(hat_n1))
+            rho2 = la.norm(U.T.dot(hat_n2))
+            n1 = U.T.dot(hat_n1)/rho1
+            a1 = rho1*hat_a1
+            n2 = U.T.dot(hat_n2)/rho2
+            a2 = rho2*hat_a2
+            return (Q1, a1, n1), (Q2, a2, n2)
+
     else:
-        cmix = np.dot(la.inv(U).dot(Uj), Uj.dot(la.inv(U)))
-        (Q1, hat_a1, hat_n1), (Q2, hat_a2, hat_n2) = _solve_am(cmix)
-        rho1 = U.T.dot(hat_n1)
-        rho2 = U.T.dot(hat_n2)
-        n1 = U.T.dot(hat_n1)/rho1
-        a1 = rho1*hat_a1
-        n2 = U.T.dot(hat_n2)/rho2
-        a2 = rho2*hat_a2
-        return (Q1, a1, n1), (Q2, a2, n2)
+            cmix = np.dot(la.inv(U).dot(Uj), Uj.dot(la.inv(U)))
+            #print "This twin is not rank 1 connected!"
+            (Q1, hat_a1, hat_n1), (Q2, hat_a2, hat_n2) = _solve_am(cmix, tol_twin)
+            # print hat_n1, hat_n2
+            rho1 = la.norm(U.T.dot(hat_n1))
+            rho2 = la.norm(U.T.dot(hat_n2))
+            n1 = U.T.dot(hat_n1)/rho1
+            a1 = rho1*hat_a1
+            n2 = U.T.dot(hat_n2)/rho2
+            a2 = rho2*hat_a2
+            return (Q1, a1, n1), (Q2, a2, n2)
 
 def _solve_f(U, a, n):
     """
@@ -439,26 +435,31 @@ def _solve_f(U, a, n):
     cofU = _brute_cof(A)
     minus_alpha = 2 * np.dot(U.dot(a), cofU.dot(n))
     beta = la.det(U.dot(U)-np.eye(3)) + minus_alpha / 4.0
-
-    if abs(minus_alpha) < SMALL:
-        return 0
-    elif beta/minus_alpha > 0:
+    if np.abs(minus_alpha) < 0.0:
+        return 0.0
+    elif beta/minus_alpha > 0.0:
         f = 0.5 + math.sqrt(beta / minus_alpha)
         if abs(1 - f) < 1E-6:
             return 1
         elif abs(f) < 1E-6:
             return 0
-        elif f > 0 and f < 1:
+        elif f > 0.0 and f < 1.0:
             return f
         else:
             return None
     else:
         return None
 
-def _solve_am(C):
+def _solve_am(C, tol_interface):
     """
     solve austenite/twinned martensite equation
+    :param C: 3x3 matrix, det A > 0, A = A^T
+    :param B: 3x3 matrix, det B > 0, B = B^T
+    :param tol_var: real numbers
+    :return: (R1, b1, m1), (R2, b2, m2)
     """
+    # C = np.dot(la.inv(B).dot(A), A.dot(la.inv(B)))
+
     if not util.utils.pos_def_sym(C):
         raise TypeError('The input should be a positive symmetric matrix! {:s}'.format(str(C)))
 
@@ -468,12 +469,12 @@ def _solve_am(C):
     c3 = math.sqrt(abs(eval[2] - 1))
     kappa = 1
 
-    if c < SMALL:
+    if np.isclose(c, 0.0):
         # TODO: solution is b = e, m = - 2 e where |e| = 1.
         print('solution is b = e, m = - 2 e where |e| = 1.')
         return
     else:
-        # if abs(eval[1] - 1) < 0.001:
+        # if _iscompatible(C, tol_interface):
         if True:
             m1 = ((math.sqrt(eval[2]) - math.sqrt(eval[0])) / c) * (-c1 * evec[0] + kappa * c3 * evec[2])
             m2 = ((math.sqrt(eval[2]) - math.sqrt(eval[0])) / c) * (-c1 * evec[0] - kappa * c3 * evec[2])
@@ -489,7 +490,10 @@ def _solve_am(C):
             # print(la.norm((Csqrt.dot(Csqrt) - C).reshape(9))<1e-4)
             R1 = (np.eye(3) + np.outer(b1, m1)).dot(la.inv(Csqrt))
             R2 = (np.eye(3) + np.outer(b2, m2)).dot(la.inv(Csqrt))
+            # print m1, m2
             return (R1, b1, m1), (R2, b2, m2)
+        else:
+            return None, None
 
 def _brute_cof(A):
     """compute cofactor of M brutely"""
@@ -508,12 +512,29 @@ def _brute_cof(A):
 def _isvariant(U, V):
     """check if U and V are variants of a Martensite object"""
     ulist = Martensite(U).getvariants()
-    flag =0
+    flag = 0
     for u in ulist:
         dv = (V - u).reshape(9)
-        if la.norm(dv) < SMALL:
+        if abs(la.norm(dv) - 0.0) < 0.0000001:
             flag+=1
+            print u, la.norm(u)
     if flag == 0:
         return False
     else:
         return True
+
+
+
+def _iscompatible(C, tol_var):
+    """
+    :param C: 3x3 matrix, det A > 0, A = A^T
+    :param B: 3x3 matrix, det B > 0, B = B^T
+    :param tol_var: real numbers
+    :return: True if there exist a rotation Q s.t. QA - B = rank 1
+    """
+    # C = np.dot(la.inv(B).dot(A), A.dot(la.inv(B)))
+    eval, _ = util.utils.sort_eig(C)
+    if np.abs(eval[1] - 1.0) < tol_var:
+        return True
+    else:
+        return False

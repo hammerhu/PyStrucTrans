@@ -1,6 +1,7 @@
 import numpy as np
-from numpy.linalg import inv, norm
-from math import sqrt, acos, cos, tan
+from numpy.linalg import norm
+
+
 
 def stereo_proj(p, z):
     r'''
@@ -33,12 +34,12 @@ def stereo_proj(p, z):
 #         R_ps = R*sqrt(2*(1+c_theta))
 #         semi_theta = sqrt((c_theta + 1)/2)
         sq_temp = round(1.0 - c_theta**2, 6)
-        sq_theta = sqrt(sq_temp)
+        sq_theta = np.sqrt(sq_temp)
         if sq_theta<1e-6:
             return np.array([0,0])
         else:
-            return np.array([R*sqrt((1-c_theta)/(1+c_theta))*(phat.dot(z_1))/sq_theta,
-                             R*sqrt((1-c_theta)/(1+c_theta))*(phat.dot(z_2))/sq_theta ])
+            return np.array([R*np.sqrt((1-c_theta)/(1+c_theta))*(phat.dot(z_1))/sq_theta,
+                             R*np.sqrt((1-c_theta)/(1+c_theta))*(phat.dot(z_2))/sq_theta ])
 #     
 #         return np.array(phat - (R_ps - R/semi_theta)*(z+phat)/R_ps)
     else:
@@ -70,7 +71,9 @@ def pole_figure(plist, z):
 #         y = p_proj.dot(z_2)
         p_pole.append(p_proj)
     return np.array(p_pole)
-    
+
+
+
     
     
     

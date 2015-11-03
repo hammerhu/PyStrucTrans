@@ -1,7 +1,7 @@
 from setuptools import setup
 import structrans
 
-setup(name='PyStrucTrans',
+setup(name='StrucTrans',
       version=structrans.__verison__,
       description='A python package for structural phase transformation',
       url='http://github.com/structrans/PyStrucTrans',
@@ -29,11 +29,11 @@ setup(name='PyStrucTrans',
       install_requires=(
           'numpy >= 1.6.0'
       ),
-      scripts=['bin/lattcorr'],
+      #scripts=['bin/lattcorr'],
       entry_points={
         # 'console_scripts': []
       },
       data_files=[],
       test_suite='nose.collector',
-      tests_require=['nose'],
+      tests_require=['nose', 'numpy'],
       zip_safe=False)
