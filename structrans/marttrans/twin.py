@@ -517,7 +517,6 @@ def _isvariant(U, V):
         dv = (V - u).reshape(9)
         if abs(la.norm(dv) - 0.0) < 0.0000001:
             flag+=1
-            print u, la.norm(u)
     if flag == 0:
         return False
     else:
