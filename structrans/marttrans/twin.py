@@ -385,7 +385,7 @@ def _solvetwin(U, Uj, e, tol_twin):
         R180 = -np.eye(3) + 2*np.outer(ehat, ehat)
         uj = np.dot(R180.dot(U), R180.T)
         if _isvariant(U, Uj):
-            print("This is normal twin")
+            # print("This is normal twin")
             n1 = e
             denominator = np.dot(np.dot(Uinv, e), np.dot(Uinv, e))
             a1 = 2 * (Uinv.dot(e)/denominator - U.dot(e))
